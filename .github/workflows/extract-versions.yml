@@ -43,6 +43,9 @@ jobs:
           > versions.txt
           for f in *.exe; do
             version=$(exiftool -FileVersion "$f" | awk -F': ' '{print $2}')
+            if [ -z "$version" ]; then
+              version="NO_VERSION"
+            fi
             echo -e "$f\t$version" >> versions.txt
           done
 
