@@ -1,28 +1,55 @@
-# This is a basic workflow to help you get started with Actions
+name: Extract EXE Versions
 
-name: CI
-
-# Controls when the workflow will run
 on:
   release:
     types: [published]
-
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  hash:
+  extract_versions:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Needed to update release assets
 
-    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      - name: Hashing Action
-        uses: thewh1teagle/checksum@v2
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install exiftool
+        run: sudo apt-get install -y libimage-exiftool-perl
+
+      - name: Get latest release info
+        id: get_release
+        uses: octokit/request-action@v2.x
         with:
-          patterns: |
-            *.exe
-          algorithm: sha256
+          route: GET /repos/${{ github.repository }}/releases/latest
         env:
-          # You must enable write permission in github.com/user/repo/settings/actions -> Workflow permissions -> Read and write permissions
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download EXE assets
+        run: |
+          mkdir downloads
+          cd downloads
+          assets=$(jq -r '.data.assets[] | select(.name | endswith(".exe")) | [.name, .browser_download_url] | @tsv' <<< '${{ steps.get_release.outputs.data }}')
+          while IFS=$'\t' read -r name url; do
+            echo "Downloading $name from $url"
+            curl -L -o "$name" -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" "$url"
+          done <<< "$assets"
+
+      - name: Extract File Versions
+        run: |
+          cd downloads
+          > versions.txt
+          for f in *.exe; do
+            version=$(exiftool -FileVersion "$f" | awk -F': ' '{print $2}')
+            echo "$f: $version" >> versions.txt
+          done
+
+      - name: Upload versions.txt to release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ fromJson(steps.get_release.outputs.data).tag_name }}
+          files: downloads/versions.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
