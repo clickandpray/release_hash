@@ -31,7 +31,7 @@ jobs:
         run: |
           mkdir downloads
           cd downloads
-          assets=$(jq -r '.data.assets[] | select(.name | endswith(".exe")) | [.name, .browser_download_url] | @tsv' <<< '${{ steps.get_release.outputs.data }}')
+          assets=$(jq -r '.assets[] | select(.name | endswith(".exe")) | [.name, .browser_download_url] | @tsv' <<< '${{ steps.get_release.outputs.data }}')
           while IFS=$'\t' read -r name url; do
             echo "Downloading $name from $url"
             curl -L -o "$name" -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" "$url"
